@@ -220,6 +220,7 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
 
     RenderScreenshot(framebuffers);
     Frame* frame = present_manager.GetRenderFrame();
+    frame->display_vblanks = framebuffers.empty() ? 0 : framebuffers.front().display_vblanks;
 
     scheduler.RequestOutsideRenderPassOperationContext();
     blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
@@ -236,6 +237,7 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     const size_t generated_frames = frame_gen.GeneratedFrameCount();
     for (size_t generation = 0; generation < generated_frames; ++generation) {
         Frame* generated = present_manager.GetRenderFrame();
+        generated->display_vblanks = 0;
         blit_swapchain.PrepareFrame(device, generated, render_window.GetFramebufferLayout());
         frame_gen.GenerateInto(device, generated, generation);
         scheduler.Flush(*generated->render_ready);
