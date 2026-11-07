@@ -1779,7 +1779,7 @@ private:
         m_previous_fence_id = ~w[22];
         m_previous_fence_value = w[24];
         const auto waited = std::chrono::steady_clock::now();
-        Composite(w[5], ~w[22], w[24], w[7]);
+        Composite(w[5], ~w[22], w[24], w[7], GameTimeDisplayVblanks(w[12]));
         const auto composited = std::chrono::steady_clock::now();
         PaceToVblank(w[12]);
         const auto paced = std::chrono::steady_clock::now();
@@ -1843,6 +1843,7 @@ private:
     // next vblank instead (title 4 ran at up to 160 fps, its timing and audio with it).
     std::chrono::steady_clock::time_point m_next_vblank{};
     u32 m_swap_word{};
+    u32 m_previous_step{1};
 
     // timing: present word 12, (swap interval << 16) | refresh rate. Fire Emblem: Fortune's Weave
     // sends 0x1003c during its boot logos and 0x2003c (two vblanks per frame, 30 fps) after; paced
@@ -1955,7 +1956,37 @@ private:
     // RGBA8 surface in the console's native GOB layout at GPU address == CPU address.
     // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
     // into from the image's top-left corner (0 when it gives none).
-    void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
+    // Mario Kart World's dynamic mode alternates 1- and 2-vblank frames while the guest is paced
+    // at every vblank (PaceToVblank), so frames reached the screen as soon as they were drawn:
+    // a 33 ms step shown for ~20 ms, a 17 ms step for ~25 ms (uneven motion at any frame rate).
+    // Tag each frame with its step so the present thread shows it for that long instead.
+    // EDEN_NX2_RETIME=0 turns it off; EDEN_NX2_RETIME_SHIFT=1 uses the previous present's step.
+    u32 GameTimeDisplayVblanks(u32 timing) {
+        static const int retime = [] {
+            const char* value = std::getenv("EDEN_NX2_RETIME");
+            return value == nullptr ? 1 : value[0] != '0';
+        }();
+        static const bool shift = [] {
+            const char* value = std::getenv("EDEN_NX2_RETIME_SHIFT");
+            return value != nullptr && value[0] == '1';
+        }();
+        const u32 step = std::clamp<u32>(timing >> 16, 1, 4);
+        const u32 previous = std::exchange(m_previous_step, step);
+        if (!retime) {
+            return 0;
+        }
+        const auto& process = Kernel::GetCurrentProcess(kernel);
+        const bool mkw_dynamic =
+            process.GetProgramId() == Settings::MarioKartWorldProgramId &&
+            process.IsMkwDynamicFpsPatchApplied() && Settings::values.mkw_dynamic_fps.GetValue();
+        if (!mkw_dynamic || (timing & 0xffff) != 60) {
+            return 0;
+        }
+        return shift ? previous : step;
+    }
+
+    void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size,
+                   u32 display_vblanks = 0) {
         u64 address{};
         Nx2ImageLayout layout{};
         u32 image_format{};
@@ -2038,6 +2069,7 @@ private:
             .crop_rect = {0, 0, static_cast<int>(crop_width), static_cast<int>(crop_height)},
             .blending = Tegra::BlendMode::Opaque,
             .native_tiling = true,
+            .display_vblanks = display_vblanks,
         }};
         std::vector<Nvidia::NvFence> fences;
         if (fence_id < 192) {

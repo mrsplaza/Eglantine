@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <boost/container/deque.hpp>
@@ -38,6 +39,8 @@ struct Frame {
     vk::Semaphore render_ready;
     vk::Fence present_done;
     bool storage_capable{};
+    /// Vblanks this frame follows the previous one by in game time (0: present when ready).
+    u32 display_vblanks{};
 };
 
 class PresentManager {
@@ -83,6 +86,9 @@ private:
 
     void DiscardFrame(Frame* frame);
 
+    /// Holds a frame until its game-time step since the previous one has passed (bounded).
+    void PaceToGameTime(const Frame* frame);
+
     void SetImageCount();
 
 private:
@@ -109,6 +115,8 @@ private:
     std::atomic<std::size_t> image_count{};
     std::atomic<std::size_t> swapchain_image_count{};
     std::atomic<VkFormat> swapchain_image_format{};
+    std::chrono::steady_clock::time_point last_display{};
+    bool have_last_display{};
 };
 
 } // namespace Vulkan

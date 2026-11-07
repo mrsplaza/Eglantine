@@ -39,6 +39,9 @@ struct FramebufferConfig {
     BlendMode blending{};
     bool native_tiling{};
     u32 layer_stack_mask{Service::Nvnflinger::DefaultLayerStackMask};
+    /// Vblanks the guest asked this frame to follow the previous one by (its game-time step).
+    /// Non-zero only where the present thread should pace frames by it (MKW dynamic mode).
+    u32 display_vblanks{};
 };
 
 Common::Rectangle<f32> NormalizeCrop(const FramebufferConfig& framebuffer, u32 texture_width,

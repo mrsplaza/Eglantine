@@ -4,6 +4,11 @@
 // SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <thread>
+
 #include "common/settings.h"
 #include "common/thread.h"
 #include "core/frontend/emu_window.h"
@@ -345,6 +350,7 @@ void PresentManager::PresentThread(std::stop_token token) {
             // before the queue lock goes out of scope. This way the swapchain
             // lock in WaitPresent is guaranteed to occur after here.
             void(std::exchange(lock, std::unique_lock{swapchain_mutex}));
+            PaceToGameTime(frame);
             CopyToSwapchain(frame);
 
             // Free the frame for reuse
@@ -353,6 +359,53 @@ void PresentManager::PresentThread(std::stop_token token) {
             free_cv.notify_one();
         }
     }
+}
+
+void PresentManager::PaceToGameTime(const Frame* frame) {
+    using Clock = std::chrono::steady_clock;
+    // Latency the frames may gain over the game's timeline, and how much a step may be
+    // shortened to give it back (EDEN_NX2_RETIME_MAX_MS, EDEN_NX2_RETIME_SHRINK percent).
+    static const Clock::duration max_latency = [] {
+        const char* value = std::getenv("EDEN_NX2_RETIME_MAX_MS");
+        const double ms = value != nullptr ? std::strtod(value, nullptr) : 17.0;
+        return std::chrono::duration_cast<Clock::duration>(
+            std::chrono::duration<double, std::milli>(std::clamp(ms, 0.0, 100.0)));
+    }();
+    static const double shrink = [] {
+        const char* value = std::getenv("EDEN_NX2_RETIME_SHRINK");
+        const double percent = value != nullptr ? std::strtod(value, nullptr) : 10.0;
+        return std::clamp(percent, 0.0, 100.0) / 100.0;
+    }();
+    constexpr auto vblank = std::chrono::nanoseconds{16'666'667};
+
+    const Clock::time_point now = Clock::now();
+    if (frame->display_vblanks == 0 || !have_last_display ||
+        now - last_display > std::chrono::milliseconds{250}) {
+        last_display = now;
+        have_last_display = frame->display_vblanks != 0;
+        return;
+    }
+    const auto step = std::chrono::duration_cast<Clock::duration>(vblank * frame->display_vblanks);
+    Clock::time_point target = last_display + step;
+    if (target <= now) {
+        // Drawn later than its step: show it at once and follow the game from here.
+        last_display = now;
+        return;
+    }
+    if (target - now > max_latency) {
+        // Frames are running ahead of the screen: shorten this step a little to catch up.
+        const auto shortest = last_display + std::chrono::duration_cast<Clock::duration>(
+                                                 step * (1.0 - shrink));
+        target = (std::max)(now + max_latency, shortest);
+    }
+    constexpr auto spin_tail = std::chrono::milliseconds{1};
+    if (target - now > spin_tail) {
+        std::this_thread::sleep_for(target - now - spin_tail);
+    }
+    while (Clock::now() < target) {
+        std::this_thread::yield();
+    }
+    last_display = target;
 }
 
 void PresentManager::RecreateSwapchain(Frame* frame) {
