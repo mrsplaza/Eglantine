@@ -14,6 +14,7 @@
 
 #include "common/common_types.h"
 #include "common/polyfill_thread.h"
+#include "video_core/renderer_vulkan/vk_display_pacer.h"
 #include "video_core/vulkan_common/vulkan_memory_allocator.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 
@@ -89,6 +90,10 @@ private:
     /// Holds a frame until its game-time step since the previous one has passed (bounded).
     void PaceToGameTime(const Frame* frame);
 
+    /// Mario Kart World: queues the frame on the display's refresh grid when the frame rate
+    /// limiter is set to a fixed rate the display can show evenly (see DisplayPacer).
+    void PaceToDisplay(bool backlog);
+
     void SetImageCount();
 
 private:
@@ -117,6 +122,7 @@ private:
     std::atomic<VkFormat> swapchain_image_format{};
     std::chrono::steady_clock::time_point last_display{};
     bool have_last_display{};
+    DisplayPacer display_pacer;
 };
 
 } // namespace Vulkan

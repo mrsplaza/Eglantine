@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <thread>
 
+#include "common/mkw_path.h"
 #include "common/settings.h"
 #include "common/thread.h"
 #include "core/frontend/emu_window.h"
@@ -344,6 +345,7 @@ void PresentManager::PresentThread(std::stop_token token) {
             // Take the frame and notify anyone waiting
             Frame* frame = present_queue.front();
             present_queue.pop_front();
+            const bool backlog = !present_queue.empty();
             frame_cv.notify_one();
 
             // By exchanging the lock ownership we take the swapchain lock
@@ -351,6 +353,7 @@ void PresentManager::PresentThread(std::stop_token token) {
             // lock in WaitPresent is guaranteed to occur after here.
             void(std::exchange(lock, std::unique_lock{swapchain_mutex}));
             PaceToGameTime(frame);
+            PaceToDisplay(backlog);
             CopyToSwapchain(frame);
 
             // Free the frame for reuse
@@ -406,6 +409,31 @@ void PresentManager::PaceToGameTime(const Frame* frame) {
         std::this_thread::yield();
     }
     last_display = target;
+}
+
+void PresentManager::PaceToDisplay(bool backlog) {
+    double target_fps = 0.0;
+    switch (Settings::values.frame_pacing_mode.GetValue()) {
+    case Settings::FramePacingMode::Target_30:
+        target_fps = 30.0;
+        break;
+    case Settings::FramePacingMode::Target_60:
+        target_fps = 60.0;
+        break;
+    case Settings::FramePacingMode::Target_90:
+        target_fps = 90.0;
+        break;
+    case Settings::FramePacingMode::Target_120:
+        target_fps = 120.0;
+        break;
+    default:
+        break;
+    }
+    const bool wanted = target_fps > 0.0 && Settings::values.use_speed_limit.GetValue() &&
+                        !Settings::values.frame_gen.GetValue() &&
+                        Mkw::Enabled(Mkw::Component::DisplayPacing);
+    // When this paces the frame, the swapchain skips its own CPU-clock limiter for it.
+    swapchain.SetExternalPacing(wanted && display_pacer.Wait(target_fps, backlog));
 }
 
 void PresentManager::RecreateSwapchain(Frame* frame) {

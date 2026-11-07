@@ -216,7 +216,11 @@ bool Swapchain::AcquireNextImage(bool may_flush) {
         wait_with_frame_pacing();
     }
 #else
-    wait_with_frame_pacing();
+    if (external_pacing) {
+        scheduler.Wait(resource_ticks[image_index], 0.0, may_flush);
+    } else {
+        wait_with_frame_pacing();
+    }
 #endif
 
     resource_ticks[image_index] = scheduler.CurrentTick();

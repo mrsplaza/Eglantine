@@ -44,6 +44,12 @@ public:
     void Present(VkSemaphore render_semaphore);
 
     /// Returns true when the swapchain needs to be recreated.
+    /// The next acquired image is already paced by the caller (display-synchronized pacing):
+    /// skip the CPU-clock frame limiter for it.
+    void SetExternalPacing(bool enabled) {
+        external_pacing = enabled;
+    }
+
     bool NeedsRecreation() const {
         return IsSubOptimal() || NeedsPresentModeUpdate();
     }
@@ -144,6 +150,7 @@ private:
     VkSurfaceFormatKHR surface_format{};
     bool has_imm{false};
     bool has_mailbox{false};
+    bool external_pacing{false};
     bool has_fifo_relaxed{false};
 
     bool is_outdated{};

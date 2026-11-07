@@ -17,6 +17,8 @@ namespace Mkw {
 enum class Component : u32 {
     ImageReserve,   ///< Device memory kept for textures (no driver allocations per scene).
     GameTimePacing, ///< Dynamic mode only: frames shown for their game-time step.
+    DisplayPacing,  ///< Fixed frame rate presented on the display's refresh grid (no stutter from
+                    ///< a limiter that drifts against the vertical blank).
     Count,
 };
 

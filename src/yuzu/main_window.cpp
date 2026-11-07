@@ -8,6 +8,7 @@
 #undef VMA_IMPLEMENTATION
 #endif
 
+#include <cstdlib>
 #include <boost/algorithm/string/split.hpp>
 #include "common/fs/path_util.h"
 #include "common/game_presets.h"
@@ -3402,8 +3403,14 @@ void MainWindow::ShowFullscreen() {
         window->hide();
         window->setWindowFlags(window->windowFlags() | Qt::FramelessWindowHint);
         const auto screen_geometry = GuessCurrentScreen(window)->geometry();
+        // One pixel taller than the screen keeps Windows from treating the window as fullscreen
+        // (OpenGL vsync problems). EDEN_BORDERLESS_EXACT=1 uses the exact screen size instead.
+        static const bool exact = [] {
+            const char* value = std::getenv("EDEN_BORDERLESS_EXACT");
+            return value != nullptr && value[0] == '1';
+        }();
         window->setGeometry(screen_geometry.x(), screen_geometry.y(), screen_geometry.width(),
-                            screen_geometry.height() + 1);
+                            screen_geometry.height() + (exact ? 0 : 1));
         window->raise();
         window->showNormal();
     };

@@ -23,6 +23,7 @@ struct ComponentInfo {
 constexpr std::array<ComponentInfo, static_cast<size_t>(Component::Count)> Components{{
     {"IMAGE_RESERVE", false},
     {"GAME_TIME_PACING", false},
+    {"DISPLAY_PACING", false},
 }};
 
 // Texture reserve used when ImageReserve is on and no size is given.
