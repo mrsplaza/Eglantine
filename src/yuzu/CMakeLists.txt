@@ -486,3 +486,8 @@ endif()
 target_link_libraries(yuzu PRIVATE OpenSSL::SSL OpenSSL::Crypto SDL3::SDL3)
 
 create_target_directory_groups(yuzu)
+
+if (MSVC AND NOT CXX_CLANG)
+    # video_core is built with /GL (whole-program optimization of the GPU command path).
+    target_link_options(yuzu PRIVATE $<$<CONFIG:Release>:/LTCG>)
+endif()

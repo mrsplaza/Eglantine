@@ -298,6 +298,12 @@ add_library(video_core STATIC
     video_core.h
 )
 
+# Experimental MKW builds: whole-program optimization of the GPU command path (MSVC /GL; the
+# executables link it with /LTCG).
+if (MSVC AND NOT CXX_CLANG)
+    set_property(TARGET video_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()
+
 if (ENABLE_LSFG)
     target_sources(video_core PRIVATE
         frame_gen/lossless_dll.cpp

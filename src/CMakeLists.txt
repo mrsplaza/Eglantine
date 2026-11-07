@@ -132,6 +132,12 @@ if(MSVC AND NOT CXX_CLANG)
         /GR- # Disable run time type information
     )
 
+    # Experimental MKW builds: code for CPUs with AVX2 (Zen 2 and later, Haswell and later) and
+    # more aggressive inlining on the emulator's own hot paths (GPU command processing).
+    if(NOT CXX_CLANG)
+        add_compile_options(/arch:AVX2 $<$<CONFIG:Release>:/Ob3>)
+    endif()
+
     if(NOT CXX_CLANG)
         add_compile_options(
             # Warnings

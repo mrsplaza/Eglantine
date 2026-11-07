@@ -79,3 +79,8 @@ if (NOT MSVC)
         $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-unused-parameter>
         $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-missing-field-initializers>)
 endif()
+
+if (MSVC AND NOT CXX_CLANG)
+    # video_core is built with /GL (whole-program optimization of the GPU command path).
+    target_link_options(yuzu-cmd PRIVATE $<$<CONFIG:Release>:/LTCG>)
+endif()
