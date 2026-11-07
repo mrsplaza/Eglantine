@@ -122,6 +122,12 @@ namespace Vulkan {
                                         VmaAllocation& allocation,
                                         VmaAllocationInfo& alloc_info) const;
 
+        /// An image in the reserve pool (EDEN_NX2_IMAGE_RESERVE_MIB); fails when it doesn't fit.
+        VkResult CreateImageInReservePool(const VkImageCreateInfo& ci,
+                                          const VmaAllocationCreateInfo& alloc_ci, VkImage& handle,
+                                          VmaAllocation& allocation,
+                                          VmaAllocationInfo& alloc_info) const;
+
         VmaAllocation AllocateSparseMemory(const VkMemoryRequirements &requirements,
                                            VkDeviceMemory &memory, VkDeviceSize &offset) const;
 
@@ -172,6 +178,8 @@ namespace Vulkan {
         mutable std::mutex buffer_type_mutex;
         /// Memory type of device-local buffers by usage and flags (CreateBufferInSeparatePool).
         mutable std::unordered_map<u64, u32> buffer_memory_types;
+        /// Memory type of images by usage, flags and tiling (CreateImageInReservePool).
+        mutable std::unordered_map<u64, u32> image_memory_types;
     };
 
     /// Logs VMA's blocks and allocations per memory type, and each heap's budget.

@@ -232,8 +232,13 @@ vk::Image MemoryAllocator::CreateImage(const VkImageCreateInfo &ci, bool dedicat
     // unbacked sparse fallback below.
     const u64 texels = u64{ci.extent.width} * ci.extent.height * ci.extent.depth * ci.arrayLayers;
     const bool huge = texels > (u64{1} << 28);
-    VkResult result = huge ? VK_ERROR_OUT_OF_DEVICE_MEMORY
-                           : vmaCreateImage(allocator, &ci, &alloc_ci, &handle, &allocation, &alloc_info);
+    VkResult result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    if (!huge && !dedicated && Device::ImageReserveBytes() != 0) {
+        result = CreateImageInReservePool(ci, alloc_ci, handle, allocation, alloc_info);
+    }
+    if (result != VK_SUCCESS && !huge) {
+        result = vmaCreateImage(allocator, &ci, &alloc_ci, &handle, &allocation, &alloc_info);
+    }
     if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY && !huge) {
         // Over the device memory budget (Switch 2 titles fill 8 GB cards): let the driver page
         // it out rather than failing the draw and aborting.
@@ -367,6 +372,40 @@ void MemoryAllocator::FreeSparseMemory(VmaAllocation allocation) const {
     if (allocation != VK_NULL_HANDLE) {
         vmaFreeMemory(allocator, allocation);
     }
+}
+
+VkResult MemoryAllocator::CreateImageInReservePool(const VkImageCreateInfo& ci,
+                                                  const VmaAllocationCreateInfo& alloc_ci,
+                                                  VkImage& handle, VmaAllocation& allocation,
+                                                  VmaAllocationInfo& alloc_info) const {
+    // Images up to a block go to the reserve pool; larger ones (and any VMA can't place there)
+    // take the default blocks or their own memory as before.
+    u32 memory_type{};
+    {
+        std::scoped_lock lk{buffer_type_mutex};
+        const auto key = (u64{ci.usage} << 40) ^ (u64{ci.flags} << 24) ^ (static_cast<u64>(ci.tiling) << 20) ^
+                         static_cast<u64>(ci.format);
+        if (const auto it = image_memory_types.find(key); it != image_memory_types.end()) {
+            memory_type = it->second;
+        } else if (vmaFindMemoryTypeIndexForImageInfo(allocator, &ci, &alloc_ci, &memory_type) ==
+                   VK_SUCCESS) {
+            image_memory_types.emplace(key, memory_type);
+        } else {
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+    }
+    const VmaPool pool = device.GetSeparatePool(Device::SeparatePool::Images, memory_type);
+    if (pool == VK_NULL_HANDLE) {
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    VmaAllocationCreateInfo pool_ci = alloc_ci;
+    pool_ci.pool = pool;
+    pool_ci.memoryTypeBits = 0;
+    // The reserve is already allocated: placing an image in it never exceeds the budget.
+    pool_ci.flags &= ~VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+    // Only fill the reserved blocks; a full pool sends the image to the default blocks.
+    pool_ci.flags |= VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT;
+    return vmaCreateImage(allocator, &ci, &pool_ci, &handle, &allocation, &alloc_info);
 }
 
 bool MemoryAllocator::CreateBufferInSeparatePool(const VkBufferCreateInfo& ci, MemoryUsage usage,

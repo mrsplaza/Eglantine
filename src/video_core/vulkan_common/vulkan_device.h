@@ -273,11 +273,16 @@ public:
     enum class SeparatePool : u32 {
         SparsePages,
         DeviceBuffers,
+        /// Images up to a block, when EDEN_NX2_IMAGE_RESERVE_MIB keeps a reserve of blocks.
+        Images,
     };
     static constexpr VkDeviceSize SeparatePoolBlockSize = 16ULL << 20;
 
     /// The pool of that kind for a memory type, created on first use (null if that failed).
     VmaPool GetSeparatePool(SeparatePool kind, u32 memory_type) const;
+
+    /// Device memory reserved for images by EDEN_NX2_IMAGE_RESERVE_MIB (0: no image pool).
+    static u64 ImageReserveBytes();
 
     /// Returns the logical device.
     const vk::Device& GetLogical() const {
@@ -1243,7 +1248,9 @@ private:
     VkInstance instance;         ///< Vulkan instance.
     VmaAllocator allocator{};    ///< VMA allocator.
     mutable std::mutex separate_pools_mutex;
-    mutable std::array<std::array<VmaPool, VK_MAX_MEMORY_TYPES>, 2> separate_pools{};
+    mutable std::array<std::array<VmaPool, VK_MAX_MEMORY_TYPES>, 3> separate_pools{};
+    /// Pools that could not be created: not retried on every allocation.
+    mutable std::array<std::array<bool, VK_MAX_MEMORY_TYPES>, 3> separate_pool_failed{};
     vk::DeviceDispatch dld;      ///< Device function pointers.
     vk::PhysicalDevice physical; ///< Physical device.
     vk::Device logical;          ///< Logical device.

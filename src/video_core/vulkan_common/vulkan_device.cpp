@@ -846,12 +846,19 @@ Device::~Device() {
 VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
     std::scoped_lock lk{separate_pools_mutex};
     VmaPool& pool = separate_pools[static_cast<u32>(kind)][memory_type];
-    if (pool == VK_NULL_HANDLE) {
+    bool& failed = separate_pool_failed[static_cast<u32>(kind)][memory_type];
+    if (pool == VK_NULL_HANDLE && !failed) {
+        // The image pool keeps this many blocks allocated for the whole session: textures created
+        // and freed by the thousand reuse them instead of asking the driver for new memory (each
+        // vkAllocateMemory/vkFreeMemory pair costs milliseconds on Windows, hundreds per scene).
+        const size_t min_blocks =
+            kind == SeparatePool::Images ? static_cast<size_t>(ImageReserveBytes() / SeparatePoolBlockSize)
+                                         : 0;
         const VmaPoolCreateInfo ci{
             .memoryTypeIndex = memory_type,
             .flags = 0,
             .blockSize = SeparatePoolBlockSize,
-            .minBlockCount = 0,
+            .minBlockCount = min_blocks,
             .maxBlockCount = 0,
             .priority = 0.f,
             .minAllocationAlignment = 0,
@@ -859,9 +866,25 @@ VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
         };
         if (vmaCreatePool(allocator, &ci, &pool) != VK_SUCCESS) {
             pool = VK_NULL_HANDLE;
+            failed = true;
+        }
+        if (kind == SeparatePool::Images) {
+            LOG_INFO(Render_Vulkan, "Image reserve pool: {} MiB in {} blocks (memory type {}){}",
+                     (min_blocks * SeparatePoolBlockSize) >> 20, min_blocks, memory_type,
+                     pool == VK_NULL_HANDLE ? ", creation failed" : "");
         }
     }
     return pool;
+}
+
+u64 Device::ImageReserveBytes() {
+    // EDEN_NX2_IMAGE_RESERVE_MIB=<n>: device memory kept for images (0 or unset: no reserve pool).
+    static const u64 bytes = [] {
+        const char* value = std::getenv("EDEN_NX2_IMAGE_RESERVE_MIB");
+        const u64 mib = value != nullptr ? std::strtoull(value, nullptr, 10) : 0;
+        return (std::min<u64>)(mib, 6144) << 20;
+    }();
+    return bytes;
 }
 
 void Device::LoadStaticPipelineCache() {
