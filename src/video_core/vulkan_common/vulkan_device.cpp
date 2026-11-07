@@ -852,13 +852,13 @@ VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
         // The image pool keeps this many blocks allocated for the whole session: textures created
         // and freed by the thousand reuse them instead of asking the driver for new memory (each
         // vkAllocateMemory/vkFreeMemory pair costs milliseconds on Windows, hundreds per scene).
-        const size_t min_blocks =
-            kind == SeparatePool::Images ? static_cast<size_t>(ImageReserveBytes() / SeparatePoolBlockSize)
-                                         : 0;
+        const bool images = kind == SeparatePool::Images;
+        const VkDeviceSize block_size = images ? ImagePoolBlockSize : SeparatePoolBlockSize;
+        const size_t min_blocks = images ? static_cast<size_t>(ImageReserveBytes() / block_size) : 0;
         const VmaPoolCreateInfo ci{
             .memoryTypeIndex = memory_type,
             .flags = 0,
-            .blockSize = SeparatePoolBlockSize,
+            .blockSize = block_size,
             .minBlockCount = min_blocks,
             .maxBlockCount = 0,
             .priority = 0.f,
@@ -870,8 +870,8 @@ VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
             failed = true;
         }
         if (kind == SeparatePool::Images) {
-            LOG_INFO(Render_Vulkan, "Image reserve pool: {} MiB in {} blocks (memory type {}){}",
-                     (min_blocks * SeparatePoolBlockSize) >> 20, min_blocks, memory_type,
+            LOG_INFO(Render_Vulkan, "Image pool: {} MiB kept in {} blocks of {} MiB, grows by block (memory type {}){}",
+                     (min_blocks * block_size) >> 20, min_blocks, block_size >> 20, memory_type,
                      pool == VK_NULL_HANDLE ? ", creation failed" : "");
         }
     }

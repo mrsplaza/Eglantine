@@ -20,6 +20,7 @@
 #include <dwmapi.h>
 #ifdef _MSC_VER
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "user32.lib")
 #endif
 #endif
 
@@ -49,15 +50,41 @@ bool DisplayPacer::ReadDisplayTiming() {
         QueryPerformanceFrequency(&value);
         freq = value.QuadPart;
     }
+    const std::int64_t now = Now();
+    if (mode_hz == 0 || now - mode_read > 2 * freq) {
+        // Refresh rate of the display mode (whole Hz: 119 for a 119.88 Hz mode).
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode) && mode.dmDisplayFrequency > 1) {
+            if (mode_hz != 0 && mode_hz != mode.dmDisplayFrequency) {
+                period = 0; // the user changed the refresh rate: start over
+            }
+            mode_hz = mode.dmDisplayFrequency;
+        }
+        mode_read = now;
+    }
     DWM_TIMING_INFO info{};
     info.cbSize = sizeof(info);
-    if (FAILED(DwmGetCompositionTimingInfo(nullptr, &info)) || info.qpcRefreshPeriod == 0 ||
-        info.qpcVBlank == 0) {
-        return false;
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &info)) && info.qpcRefreshPeriod != 0) {
+        const double hz = static_cast<double>(freq) / static_cast<double>(info.qpcRefreshPeriod);
+        // Accept the compositor's precise period only when it matches the mode (allowing the
+        // fractional part the mode's whole-Hz value drops).
+        if (mode_hz == 0 || (hz > mode_hz - 0.1 && hz < mode_hz + 1.0)) {
+            period = static_cast<std::int64_t>(info.qpcRefreshPeriod);
+            if (info.qpcVBlank != 0 && now - static_cast<std::int64_t>(info.qpcVBlank) < 8 * period) {
+                vblank = static_cast<std::int64_t>(info.qpcVBlank);
+            }
+        } else {
+            ++rejected;
+        }
     }
-    period = static_cast<std::int64_t>(info.qpcRefreshPeriod);
-    vblank = static_cast<std::int64_t>(info.qpcVBlank);
-    return true;
+    if (period == 0 && mode_hz > 1) {
+        period = freq / mode_hz;
+    }
+    if (period != 0 && vblank == 0) {
+        vblank = now; // no vertical blank seen yet: any anchor, corrected as soon as one is
+    }
+    return period != 0;
 #else
     return false;
 #endif
@@ -120,11 +147,17 @@ bool DisplayPacer::Wait(double target_fps, bool backlog) {
         slot = grid_at_or_after(now);
         ++caught_up;
     } else {
-        // Keep the cadence: n refreshes after the previous frame, snapped to the grid in case
-        // the compositor's estimate of the refresh moved.
+        // Keep the cadence exactly: n refreshes after the previous frame. The phase follows the
+        // refresh grid by at most a quarter millisecond per frame, so a wandering or stale vertical
+        // blank reading can never make two consecutive frames visibly uneven.
         const std::int64_t wanted = last_slot + n * period;
-        const double k = std::round(static_cast<double>(wanted - vblank - half) / static_cast<double>(period));
-        slot = vblank + static_cast<std::int64_t>(k) * period + half;
+        const double x = static_cast<double>(wanted - vblank - half) / static_cast<double>(period);
+        const std::int64_t error =
+            static_cast<std::int64_t>((x - std::round(x)) * static_cast<double>(period));
+        const std::int64_t step = freq / 4000;
+        const std::int64_t correction = std::clamp(error, -step, step);
+        max_correction = (std::max)(max_correction, correction < 0 ? -correction : correction);
+        slot = wanted - correction;
         if (slot < now) {
             // Drawn after its slot: the previous frame stays one refresh longer. Continue the
             // cadence from the slot this one gets.
@@ -150,13 +183,17 @@ bool DisplayPacer::Wait(double target_fps, bool backlog) {
     if (++frames == 600) {
         LOG_INFO(Render_Vulkan,
                  "Display pacing: last 600 frames: {} late (one refresh longer), {} caught up, "
-                 "longest wait {:.1f} ms, vblank age up to {:.1f} ms",
-                 late, caught_up, ToMs(max_wait, freq), ToMs(max_stale, freq));
+                 "longest wait {:.1f} ms, vblank age up to {:.1f} ms, largest phase step {:.2f} ms, "
+                 "{} refresh readings ignored",
+                 late, caught_up, ToMs(max_wait, freq), ToMs(max_stale, freq),
+                 ToMs(max_correction, freq), rejected);
         frames = 0;
         late = 0;
         caught_up = 0;
         max_wait = 0;
         max_stale = 0;
+        max_correction = 0;
+        rejected = 0;
     }
     return true;
 }

@@ -401,10 +401,10 @@ VkResult MemoryAllocator::CreateImageInReservePool(const VkImageCreateInfo& ci,
     VmaAllocationCreateInfo pool_ci = alloc_ci;
     pool_ci.pool = pool;
     pool_ci.memoryTypeBits = 0;
-    // The reserve is already allocated: placing an image in it never exceeds the budget.
-    pool_ci.flags &= ~VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
-    // Only fill the reserved blocks; a full pool sends the image to the default blocks.
-    pool_ci.flags |= VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT;
+    // Images share the pool's large blocks (no memory of their own, even for render targets the
+    // driver would rather allocate separately): a scene's burst of new textures costs a few
+    // vkAllocateMemory calls instead of hundreds. When the reserved blocks are full the pool
+    // grows by a block, within the budget; past the budget the image takes the default path.
     return vmaCreateImage(allocator, &ci, &pool_ci, &handle, &allocation, &alloc_info);
 }
 

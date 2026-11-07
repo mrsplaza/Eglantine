@@ -28,12 +28,18 @@ public:
     bool Wait(double target_fps, bool backlog);
 
 private:
+    /// Updates the refresh period and grid anchor. The compositor's own estimate of the period
+    /// wanders (92-118 Hz readings on a 120 Hz monitor when it composes irregularly): it is only
+    /// taken when it agrees with the display mode, otherwise the last good value is kept, so the
+    /// pacer never switches off and restarts its cadence for a bad reading.
     bool ReadDisplayTiming();
     void Report(bool active, double target_fps);
 
     std::int64_t freq = 0;      ///< Performance counter ticks per second.
     std::int64_t period = 0;    ///< Refresh period, in ticks.
     std::int64_t vblank = 0;    ///< Last known vertical blank, in ticks.
+    std::uint32_t mode_hz = 0;  ///< Refresh rate of the display mode.
+    std::int64_t mode_read = 0; ///< When the display mode was last read, in ticks.
     std::int64_t last_slot = 0; ///< When the previous frame was queued, in ticks.
     std::int64_t refreshes = 0; ///< Refreshes per frame of the current cadence.
     bool reported_active = false;
@@ -45,6 +51,8 @@ private:
     std::uint32_t caught_up = 0;
     std::int64_t max_wait = 0;
     std::int64_t max_stale = 0; ///< Age of the compositor's last vertical blank when read.
+    std::uint32_t rejected = 0; ///< Compositor readings that disagreed with the display mode.
+    std::int64_t max_correction = 0; ///< Largest phase correction applied to a frame, in ticks.
 };
 
 } // namespace Vulkan

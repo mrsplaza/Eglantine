@@ -21,9 +21,9 @@ struct ComponentInfo {
 // Defaults follow the measurements: a component is switched on here only once it has been shown
 // to make frame pacing more regular without side effects.
 constexpr std::array<ComponentInfo, static_cast<size_t>(Component::Count)> Components{{
-    {"IMAGE_RESERVE", false},
+    {"IMAGE_RESERVE", true},
     {"GAME_TIME_PACING", false},
-    {"DISPLAY_PACING", false},
+    {"DISPLAY_PACING", true},
 }};
 
 // Texture reserve used when ImageReserve is on and no size is given.

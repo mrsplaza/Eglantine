@@ -277,6 +277,9 @@ public:
         Images,
     };
     static constexpr VkDeviceSize SeparatePoolBlockSize = 16ULL << 20;
+    /// Blocks of the image pool: large enough that a scene's hundreds of new textures and render
+    /// targets need a few driver allocations instead of one each.
+    static constexpr VkDeviceSize ImagePoolBlockSize = 64ULL << 20;
 
     /// The pool of that kind for a memory type, created on first use (null if that failed).
     VmaPool GetSeparatePool(SeparatePool kind, u32 memory_type) const;
