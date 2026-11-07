@@ -25,6 +25,7 @@
 #include "common/fs/path_util.h"
 #include "common/literals.h"
 #include <ranges>
+#include "common/mkw_path.h"
 #include "common/settings.h"
 #include "common/settings_enums.h"
 #include "video_core/vulkan_common/nsight_aftermath_tracker.h"
@@ -878,10 +879,11 @@ VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
 }
 
 u64 Device::ImageReserveBytes() {
-    // EDEN_NX2_IMAGE_RESERVE_MIB=<n>: device memory kept for images (0 or unset: no reserve pool).
+    // EDEN_NX2_IMAGE_RESERVE_MIB=<n> sets it for any title; otherwise Mario Kart World's dedicated
+    // path decides (Mkw::Component::ImageReserve). 0: no reserve pool.
     static const u64 bytes = [] {
         const char* value = std::getenv("EDEN_NX2_IMAGE_RESERVE_MIB");
-        const u64 mib = value != nullptr ? std::strtoull(value, nullptr, 10) : 0;
+        const u64 mib = value != nullptr ? std::strtoull(value, nullptr, 10) : Mkw::ImageReserveMiB();
         return (std::min<u64>)(mib, 6144) << 20;
     }();
     return bytes;

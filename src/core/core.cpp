@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "game_settings.h"
+#include "common/mkw_path.h"
 #include "common/cpu_features.h"
 #include "audio_core/audio_core.h"
 #include "common/fs/fs.h"
@@ -426,6 +427,7 @@ struct System::Impl {
 
         // Expose program id to dump sites and other global readers.
         Settings::SetCurrentProgramID(params.program_id);
+        Mkw::LogSummary();
 
         // Track launch time for frontend launches
         LaunchTimestampCache::SaveLaunchTimestamp(params.program_id);

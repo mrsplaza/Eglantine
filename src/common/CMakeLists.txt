@@ -103,6 +103,8 @@ add_library(
     spin_recursive_mutex.h
     scratch_buffer.h
     settings.cpp
+    mkw_path.cpp
+    mkw_path.h
     settings.h
     settings_common.cpp
     settings_common.h

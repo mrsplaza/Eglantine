@@ -29,6 +29,7 @@
 #include "common/alignment.h"
 #include "common/div_ceil.h"
 #include "common/game_presets.h"
+#include "common/mkw_path.h"
 #include "common/settings.h"
 #include "common/thread.h"
 #include "core/core.h"
@@ -1965,7 +1966,8 @@ private:
     u32 GameTimeDisplayVblanks(u32 timing) {
         static const int retime = [] {
             const char* value = std::getenv("EDEN_NX2_RETIME");
-            return value != nullptr && value[0] == '1';
+            return (value != nullptr && value[0] == '1') ||
+                   Mkw::Enabled(Mkw::Component::GameTimePacing);
         }();
         static const bool shift = [] {
             const char* value = std::getenv("EDEN_NX2_RETIME_SHIFT");
