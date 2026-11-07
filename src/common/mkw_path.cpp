@@ -22,7 +22,7 @@ struct ComponentInfo {
 // to make frame pacing more regular without side effects.
 constexpr std::array<ComponentInfo, static_cast<size_t>(Component::Count)> Components{{
     {"IMAGE_RESERVE", true},
-    {"GAME_TIME_PACING", false},
+    {"GAME_TIME_PACING", true},
     {"DISPLAY_PACING", true},
 }};
 

@@ -92,7 +92,8 @@ private:
 
     /// Mario Kart World: queues the frame on the display's refresh grid when the frame rate
     /// limiter is set to a fixed rate the display can show evenly (see DisplayPacer).
-    void PaceToDisplay(bool backlog);
+    /// Returns whether it paced the frame.
+    bool PaceToDisplay(const Frame* frame, bool backlog);
 
     void SetImageCount();
 

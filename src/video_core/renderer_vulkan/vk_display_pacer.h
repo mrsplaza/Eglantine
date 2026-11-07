@@ -25,7 +25,11 @@ public:
     /// Returns false (without waiting) when the display cannot show `target_fps` evenly, e.g. a
     /// 144 Hz refresh for 30 fps, or when the refresh timing is unavailable; the caller then keeps
     /// its own limiter.
-    bool Wait(double target_fps, bool backlog);
+    /// `step_vblanks` (Mario Kart World's dynamic mode): the game-time step of this frame in
+    /// 60 Hz vblanks (1 = 16.7 ms, 2 = 33.3 ms). When set, the frame stays on screen exactly that
+    /// long, so 60 fps scenes run at 60 and heavy ones keep the game's own timing instead of
+    /// slowing down or juddering. The display must then refresh at a multiple of 60 Hz.
+    bool Wait(double target_fps, bool backlog, std::uint32_t step_vblanks = 0);
 
 private:
     /// Updates the refresh period and grid anchor. The compositor's own estimate of the period

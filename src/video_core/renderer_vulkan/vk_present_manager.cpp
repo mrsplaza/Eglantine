@@ -352,8 +352,11 @@ void PresentManager::PresentThread(std::stop_token token) {
             // before the queue lock goes out of scope. This way the swapchain
             // lock in WaitPresent is guaranteed to occur after here.
             void(std::exchange(lock, std::unique_lock{swapchain_mutex}));
-            PaceToGameTime(frame);
-            PaceToDisplay(backlog);
+            // On the display's refresh grid when it can (game-time steps included); otherwise
+            // the CPU-clock game-time pacing, as before.
+            if (!PaceToDisplay(frame, backlog)) {
+                PaceToGameTime(frame);
+            }
             CopyToSwapchain(frame);
 
             // Free the frame for reuse
@@ -411,7 +414,7 @@ void PresentManager::PaceToGameTime(const Frame* frame) {
     last_display = target;
 }
 
-void PresentManager::PaceToDisplay(bool backlog) {
+bool PresentManager::PaceToDisplay(const Frame* frame, bool backlog) {
     double target_fps = 0.0;
     switch (Settings::values.frame_pacing_mode.GetValue()) {
     case Settings::FramePacingMode::Target_30:
@@ -432,8 +435,15 @@ void PresentManager::PaceToDisplay(bool backlog) {
     const bool wanted = target_fps > 0.0 && Settings::values.use_speed_limit.GetValue() &&
                         !Settings::values.frame_gen.GetValue() &&
                         Mkw::Enabled(Mkw::Component::DisplayPacing);
+    // Dynamic mode: the frame carries its game-time step, which sets how long it stays on screen.
+    const u32 step = frame->display_vblanks;
     // When this paces the frame, the swapchain skips its own CPU-clock limiter for it.
-    swapchain.SetExternalPacing(wanted && display_pacer.Wait(target_fps, backlog));
+    const bool paced = (wanted || (step != 0 && Settings::values.use_speed_limit.GetValue() &&
+                                   !Settings::values.frame_gen.GetValue() &&
+                                   Mkw::Enabled(Mkw::Component::DisplayPacing))) &&
+                       display_pacer.Wait(step != 0 ? 60.0 : target_fps, backlog, step);
+    swapchain.SetExternalPacing(paced);
+    return paced;
 }
 
 void PresentManager::RecreateSwapchain(Frame* frame) {

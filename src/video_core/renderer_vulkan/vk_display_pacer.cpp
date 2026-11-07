@@ -112,21 +112,25 @@ void DisplayPacer::Report(bool active, double target_fps) {
     }
 }
 
-bool DisplayPacer::Wait(double target_fps, bool backlog) {
+bool DisplayPacer::Wait(double target_fps, bool backlog, std::uint32_t step_vblanks) {
     if (target_fps <= 0.0 || !ReadDisplayTiming()) {
         Report(false, target_fps);
         last_slot = 0;
         return false;
     }
-    const double frame_ticks = static_cast<double>(freq) / target_fps;
-    const std::int64_t n = std::llround(frame_ticks / static_cast<double>(period));
-    if (n < 1 || std::abs(static_cast<double>(n * period) - frame_ticks) > 0.01 * frame_ticks) {
-        Report(false, target_fps);
+    // Game-time steps are counted in 60 Hz vblanks: pace them as a multiple of one.
+    const double unit_fps = step_vblanks != 0 ? 60.0 : target_fps;
+    const double frame_ticks = static_cast<double>(freq) / unit_fps;
+    const std::int64_t per_unit = std::llround(frame_ticks / static_cast<double>(period));
+    if (per_unit < 1 ||
+        std::abs(static_cast<double>(per_unit * period) - frame_ticks) > 0.01 * frame_ticks) {
+        Report(false, unit_fps);
         last_slot = 0;
         return false;
     }
-    refreshes = n;
-    Report(true, target_fps);
+    const std::int64_t n = per_unit * (step_vblanks != 0 ? std::clamp<std::int64_t>(step_vblanks, 1, 4) : 1);
+    refreshes = per_unit;
+    Report(true, unit_fps);
 
     // Slots sit half a refresh before the boundary a frame is meant for: far from both edges,
     // so a frame queued there is picked up by the same refresh even with a few ms of jitter.
