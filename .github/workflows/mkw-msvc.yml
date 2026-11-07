@@ -1,0 +1,29 @@
+name: mkw-msvc
+
+# Experimental Mario Kart World builds on this fork: Windows MSVC only (no MinGW/MSYS2 job),
+# artifacts only (no release is published). Runs on every push to an mkw-* branch.
+on:
+  push:
+    branches:
+      - "mkw-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mkw-msvc-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows MSVC
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      sha: ${{ github.sha }}
+      version: ${{ github.ref_name }}
+      refspec: ${{ github.ref_name }}
+      tag: ${{ github.ref_name }}
+      release: false
+      nightly: true
+      pgo: none
