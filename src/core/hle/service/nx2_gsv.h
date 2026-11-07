@@ -1960,11 +1960,12 @@ private:
     // at every vblank (PaceToVblank), so frames reached the screen as soon as they were drawn:
     // a 33 ms step shown for ~20 ms, a 17 ms step for ~25 ms (uneven motion at any frame rate).
     // Tag each frame with its step so the present thread shows it for that long instead.
-    // EDEN_NX2_RETIME=0 turns it off; EDEN_NX2_RETIME_SHIFT=1 uses the previous present's step.
+    // Experimental, off unless EDEN_NX2_RETIME=1; EDEN_NX2_RETIME_SHIFT=1 uses the previous
+    // present's step.
     u32 GameTimeDisplayVblanks(u32 timing) {
         static const int retime = [] {
             const char* value = std::getenv("EDEN_NX2_RETIME");
-            return value == nullptr ? 1 : value[0] != '0';
+            return value != nullptr && value[0] == '1';
         }();
         static const bool shift = [] {
             const char* value = std::getenv("EDEN_NX2_RETIME_SHIFT");
